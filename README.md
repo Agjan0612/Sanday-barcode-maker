@@ -22,6 +22,12 @@ Alles draait lokaal in je eigen browser — er wordt niets verstuurd of geüploa
 4. **Barcode-opties** (stap 3): standaard **Code128** (werkt voor alle drie de
    nummertypes). Je kunt het nummer onder de barcode tonen en, om de uitlijning te
    testen, tijdelijk de etiketranden laten meeprinten.
+
+   De productnaam wordt standaard **automatisch passend gemaakt**: hij wordt eerst
+   verkleind (tot de ingestelde minimumgrootte) en over maximaal het ingestelde
+   aantal regels afgebroken; past hij dan nóg niet, dan wordt hij netjes ingekort
+   met een "…". Zet je "Naam automatisch passend maken" uit, dan wordt de gekozen
+   lettergrootte altijd gebruikt.
 5. Rechts zie je een **schaalgetrouw voorbeeld** van het eerste vel.
 6. Klik op **Genereer Word (.docx)**. Het bestand wordt gedownload; open het in
    Word en print het op je Avery-vel.

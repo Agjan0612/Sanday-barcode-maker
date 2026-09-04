@@ -50,7 +50,7 @@
   .sheet{position:relative;background:#fff;border:1px solid var(--line);margin:0 auto;box-shadow:0 1px 4px rgba(0,0,0,.08)}
   .lbl{position:absolute;overflow:hidden;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:2px}
   .lbl.bordered{outline:1px dashed #c3ced6}
-  .lbl .nm{font-weight:600;line-height:1.05;width:100%;overflow:hidden}
+  .lbl .nm{font-weight:600;width:100%;overflow:hidden;white-space:nowrap}
   .lbl img{max-width:100%;display:block}
   .kv{display:flex;justify-content:space-between;font-size:12px;color:var(--muted);margin-top:2px}
   .err-list{margin:6px 0 0;padding-left:18px;color:var(--danger);font-size:12px}
@@ -119,12 +119,22 @@
         </div>
         <div>
           <label>Lettergrootte naam (pt)</label>
-          <input id="o_namept" type="number" min="4" max="20" step="0.5" value="8">
+          <input id="o_namept" type="number" min="4" max="20" step="0.5" value="9">
         </div>
         <div class="check"><input type="checkbox" id="o_showname" checked><label for="o_showname">Productnaam tonen</label></div>
         <div class="check"><input type="checkbox" id="o_shownumber" checked><label for="o_shownumber">Nummer onder barcode tonen</label></div>
+        <div class="check"><input type="checkbox" id="o_autofit" checked><label for="o_autofit">Naam automatisch passend maken</label></div>
+        <div>
+          <label>Min. lettergrootte (pt)</label>
+          <input id="o_minpt" type="number" min="3" max="12" step="0.5" value="5">
+        </div>
+        <div>
+          <label>Max. regels voor naam</label>
+          <select id="o_maxlines"><option>1</option><option selected>2</option><option>3</option></select>
+        </div>
         <div class="check"><input type="checkbox" id="o_borders"><label for="o_borders">Etiketranden tonen (uitlijning testen)</label></div>
       </div>
+      <div class="muted" style="margin-top:8px">Bij "passend maken" wordt de naam eerst verkleind (tot de min. grootte) en over meerdere regels afgebroken; past hij dan nog niet, dan wordt hij ingekort met "…".</div>
     </div>
 
     <!-- GENERATE -->
@@ -195,7 +205,10 @@ function writeTemplate(t){
 function readOptions(){
   return {
     symbology: $("o_symbology").value,
-    namePt: parseFloat($("o_namept").value)||8,
+    namePt: parseFloat($("o_namept").value)||9,
+    autoFit: $("o_autofit").checked,
+    nameMinPt: parseFloat($("o_minpt").value)||5,
+    nameMaxLines: parseInt($("o_maxlines").value)||2,
     showName: $("o_showname").checked,
     showNumber: $("o_shownumber").checked,
     borders: $("o_borders").checked,
@@ -264,6 +277,60 @@ function renderBarcode(value, symbology, showNumber){
   return {canvas, error:null};
 }
 
+/* ---------- name fitting (auto-shrink, wrap, truncate) ---------- */
+const NAME_FONT = "Arial, 'Helvetica Neue', Helvetica, sans-serif"; // ~ Word Calibri, slightly wider = safe
+const LINE_FACTOR = 1.15;   // line height as multiple of font size
+const _measCanvas = document.createElement("canvas");
+const _measCtx = _measCanvas.getContext("2d");
+function ptToPx96(pt){ return pt*96/72; }
+
+// Greedy wrap that always fits width, breaking overlong words by character.
+function wrapHard(text, maxW, fontPx){
+  _measCtx.font = fontPx+"px "+NAME_FONT;
+  const width = s => _measCtx.measureText(s).width;
+  const lines=[]; let cur="";
+  const push=()=>{ if(cur!==""){ lines.push(cur); cur=""; } };
+  const words=String(text).trim().split(/\s+/).filter(Boolean);
+  for(let w of words){
+    // break a single word that is wider than the box
+    while(width(w) > maxW && w.length>1){
+      let i=1; while(i<w.length && width(w.slice(0,i+1))<=maxW) i++;
+      if(cur!==""){ push(); }
+      lines.push(w.slice(0,i)); w=w.slice(i);
+    }
+    const test = cur? cur+" "+w : w;
+    if(width(test)<=maxW || cur===""){ cur=test; } else { push(); cur=w; }
+  }
+  push();
+  return lines.length?lines:[""];
+}
+function ellipsize(line, maxW, fontPx){
+  _measCtx.font = fontPx+"px "+NAME_FONT;
+  let s=line;
+  while(s.length>0 && _measCtx.measureText(s+"…").width>maxW) s=s.slice(0,-1);
+  return (s+"…");
+}
+// Returns { fontPt, lines:[...], truncated }
+function computeNameFit(name, boxWmm, opts){
+  const nm=String(name||"").trim();
+  if(!opts.showName || !nm) return {fontPt:opts.namePt, lines:[], truncated:false};
+  const maxW = boxWmm * PX96_PER_MM * 0.93; // safety margin: our measuring font (Arial) is wider than Word's default, plus headroom against re-wrap
+  const maxLines = Math.max(1, opts.nameMaxLines);
+  if(!opts.autoFit){
+    return {fontPt:opts.namePt, lines:wrapHard(nm, maxW, ptToPx96(opts.namePt)).slice(0,maxLines), truncated:false};
+  }
+  const minPt = Math.min(opts.nameMinPt, opts.namePt);
+  for(let pt=opts.namePt; pt>=minPt-0.001; pt-=0.5){
+    const lines=wrapHard(nm, maxW, ptToPx96(pt));
+    if(lines.length<=maxLines) return {fontPt:+pt.toFixed(1), lines, truncated:false};
+  }
+  // still doesn't fit at min size -> truncate to maxLines with ellipsis on last line
+  const fpx=ptToPx96(minPt);
+  let lines=wrapHard(nm, maxW, fpx);
+  if(lines.length>maxLines){ lines=lines.slice(0,maxLines); lines[maxLines-1]=ellipsize(lines[maxLines-1], maxW, fpx); }
+  return {fontPt:+minPt.toFixed(1), lines, truncated:true};
+}
+
 /* ---------- build label list ---------- */
 function chosenValue(p){
   const v = (p.source==="gtin"?p.gtin : p.source==="rvg"?p.rvg : p.zi);
@@ -284,17 +351,20 @@ function buildLabels(opts){
 }
 
 /* ---------- fit geometry for one label (mm) ---------- */
-function labelGeometry(t, opts, canvas){
+// fit = result of computeNameFit (optional). Reserves space for the actual name lines.
+function labelGeometry(t, opts, canvas, fit){
   const pad = t.pad;
   const boxW = Math.max(1, t.lw - 2*pad);
-  const nameH = opts.showName ? (opts.namePt*0.3528*1.15 + 0.6) : 0; // pt->mm approx line height
+  const nLines = (opts.showName && fit && fit.lines.length) ? fit.lines.length : 0;
+  const linePt = fit ? fit.fontPt : opts.namePt;
+  const nameH = nLines ? (nLines*linePt*LINE_FACTOR*0.3528 + 0.6) : 0; // pt->mm
   const boxH = Math.max(1, t.lh - 2*pad - nameH);
   let dispW=boxW, dispH=boxH;
   if(canvas){
     const a = canvas.width/canvas.height;
     if(boxW/boxH > a){ dispH=boxH; dispW=boxH*a; } else { dispW=boxW; dispH=boxW/a; }
   }
-  return {pad, boxW, boxH, nameH, dispW, dispH};
+  return {pad, boxW, boxH, nameH, nLines, linePt, dispW, dispH};
 }
 
 /* ---------- preview ---------- */
@@ -316,11 +386,14 @@ function renderPreview(t, opts, labels){
     el.style.width=(t.lw*scale)+"px"; el.style.height=(t.lh*scale)+"px";
     const lab=labels[idx];
     if(lab){
-      const g=labelGeometry(t,opts,lab.canvas);
-      if(opts.showName && lab.name){
+      const fit=computeNameFit(lab.name, Math.max(1,t.lw-2*t.pad), opts);
+      const g=labelGeometry(t,opts,lab.canvas,fit);
+      if(fit.lines.length){
         const nm=document.createElement("div"); nm.className="nm";
-        nm.style.fontSize=Math.max(5,opts.namePt*scale*1.2)+"px";
-        nm.textContent=lab.name; el.appendChild(nm);
+        nm.style.fontSize=(fit.fontPt*0.3528*scale)+"px"; // pt->mm (0.3528) then mm->preview px (scale)
+        nm.style.lineHeight=LINE_FACTOR;
+        nm.innerHTML=fit.lines.map(esc).join("<br>");
+        el.appendChild(nm);
       }
       const img=document.createElement("img");
       img.src=lab.canvas.toDataURL("image/png");
@@ -368,13 +441,18 @@ function buildDocx(t, opts, labels){
     });
   }
   function labelCell(lab){
-    const g=labelGeometry(t,opts,lab.canvas);
+    const fit=computeNameFit(lab.name, Math.max(1,t.lw-2*t.pad), opts);
+    const g=labelGeometry(t,opts,lab.canvas,fit);
     const kids=[];
-    if(opts.showName && lab.name){
+    if(fit.lines.length){
+      const size=Math.round(fit.fontPt*2);
+      const runs=fit.lines.map((ln,i)=> new D.TextRun(i===0
+        ? {text:ln, bold:true, size}
+        : {text:ln, bold:true, size, break:1}));
       kids.push(new D.Paragraph({
         alignment:D.AlignmentType.CENTER,
-        spacing:{before:0,after:0,line:Math.round(opts.namePt*20),lineRule:"exact"},
-        children:[new D.TextRun({text:lab.name, bold:true, size:Math.round(opts.namePt*2)})],
+        spacing:{before:0,after:0,line:Math.round(fit.fontPt*LINE_FACTOR*20),lineRule:"exact"},
+        children:runs,
       }));
     }
     if(lab.canvas){
@@ -531,11 +609,15 @@ function init(){
 
   refreshTemplateSelect();
   if(st && st.options){
-    $("o_symbology").value=st.options.symbology||"CODE128";
-    $("o_namept").value=st.options.namePt||8;
-    $("o_showname").checked=st.options.showName!==false;
-    $("o_shownumber").checked=st.options.showNumber!==false;
-    $("o_borders").checked=!!st.options.borders;
+    const o=st.options;
+    $("o_symbology").value=o.symbology||"CODE128";
+    $("o_namept").value=o.namePt||9;
+    $("o_autofit").checked=o.autoFit!==false;
+    if(o.nameMinPt) $("o_minpt").value=o.nameMinPt;
+    if(o.nameMaxLines) $("o_maxlines").value=o.nameMaxLines;
+    $("o_showname").checked=o.showName!==false;
+    $("o_shownumber").checked=o.showNumber!==false;
+    $("o_borders").checked=!!o.borders;
   }
   if(st && st.template){ writeTemplate(st.template); refreshTemplateSelect(st.selected); if(st.selected) $("templateSelect").value=st.selected; }
   else { writeTemplate(PRESETS[Object.keys(PRESETS)[0]]); $("templateSelect").value="preset:"+Object.keys(PRESETS)[0]; }
@@ -547,7 +629,7 @@ function init(){
     // manual edit switches to "custom" unless it matches
     scheduleUpdate();
   }));
-  ["o_symbology","o_namept","o_showname","o_shownumber","o_borders"].forEach(id=>$(id).addEventListener("input",scheduleUpdate));
+  ["o_symbology","o_namept","o_autofit","o_minpt","o_maxlines","o_showname","o_shownumber","o_borders"].forEach(id=>$(id).addEventListener("input",scheduleUpdate));
   $("generate").addEventListener("click", generate);
 
   $("saveTemplate").addEventListener("click",()=>{
