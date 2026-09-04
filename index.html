@@ -1,0 +1,588 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Barcode-etiketten maker</title>
+<style>
+  :root{
+    --bg:#f4f6f8; --panel:#ffffff; --ink:#1f2933; --muted:#66757f;
+    --line:#d7dde3; --accent:#0b6ea8; --accent-ink:#ffffff;
+    --danger:#b3261e; --ok:#1f7a44; --chip:#eef3f7;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font:14px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;color:var(--ink);background:var(--bg)}
+  header{background:var(--accent);color:var(--accent-ink);padding:18px 24px}
+  header h1{margin:0;font-size:20px}
+  header p{margin:4px 0 0;opacity:.9;font-size:13px}
+  main{max-width:1180px;margin:0 auto;padding:20px;display:grid;grid-template-columns:1fr 420px;gap:20px}
+  @media(max-width:960px){main{grid-template-columns:1fr}}
+  .panel{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:16px;margin-bottom:18px}
+  .panel h2{margin:0 0 12px;font-size:15px;display:flex;align-items:center;gap:8px}
+  .panel h2 .num{background:var(--accent);color:#fff;width:22px;height:22px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-size:12px}
+  label{font-size:12px;color:var(--muted);display:block;margin-bottom:3px}
+  input,select{width:100%;padding:7px 8px;border:1px solid var(--line);border-radius:6px;font:inherit;background:#fff}
+  input:focus,select:focus{outline:2px solid #bfe0f2;border-color:var(--accent)}
+  button{font:inherit;cursor:pointer;border:1px solid var(--line);background:#fff;border-radius:6px;padding:8px 12px}
+  button:hover{background:#f0f4f7}
+  .btn-primary{background:var(--accent);color:#fff;border-color:var(--accent);font-weight:600}
+  .btn-primary:hover{filter:brightness(1.08);background:var(--accent)}
+  .btn-primary:disabled{opacity:.5;cursor:not-allowed}
+  .btn-sm{padding:5px 9px;font-size:12px}
+  .btn-danger{color:var(--danger);border-color:#e6c4c1}
+  .row{display:grid;gap:10px}
+  .product{border:1px solid var(--line);border-radius:8px;padding:12px;margin-bottom:12px;background:#fbfcfd}
+  .product .grid{display:grid;grid-template-columns:2fr 1fr 1fr 1fr;gap:10px}
+  .product .grid2{display:grid;grid-template-columns:1.4fr 1fr auto;gap:10px;align-items:end;margin-top:10px}
+  @media(max-width:620px){.product .grid{grid-template-columns:1fr 1fr}.product .grid2{grid-template-columns:1fr 1fr}}
+  .tmpl-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}
+  .opts{display:grid;grid-template-columns:repeat(2,1fr);gap:10px 16px}
+  .check{display:flex;align-items:center;gap:8px}
+  .check input{width:auto}
+  .check label{margin:0;color:var(--ink);font-size:13px}
+  .muted{color:var(--muted);font-size:12px}
+  .toolbar{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
+  .status{padding:10px 12px;border-radius:6px;font-size:13px;margin-top:12px}
+  .status.err{background:#fdecea;color:var(--danger);border:1px solid #f3c9c5}
+  .status.ok{background:#e8f4ee;color:var(--ok);border:1px solid #bfe0cd}
+  .status.info{background:var(--chip);color:var(--ink);border:1px solid var(--line)}
+  .preview-wrap{position:sticky;top:16px}
+  .sheet{position:relative;background:#fff;border:1px solid var(--line);margin:0 auto;box-shadow:0 1px 4px rgba(0,0,0,.08)}
+  .lbl{position:absolute;overflow:hidden;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:2px}
+  .lbl.bordered{outline:1px dashed #c3ced6}
+  .lbl .nm{font-weight:600;line-height:1.05;width:100%;overflow:hidden}
+  .lbl img{max-width:100%;display:block}
+  .kv{display:flex;justify-content:space-between;font-size:12px;color:var(--muted);margin-top:2px}
+  .err-list{margin:6px 0 0;padding-left:18px;color:var(--danger);font-size:12px}
+  footer{max-width:1180px;margin:0 auto;padding:0 20px 40px;color:var(--muted);font-size:12px}
+  code{background:var(--chip);padding:1px 5px;border-radius:4px}
+</style>
+</head>
+<body>
+<header>
+  <h1>Barcode-etiketten maker</h1>
+  <p>Genereer Avery-etiketvellen (Word .docx) met productnaam + scanbare barcode (GTIN / RVG / ZI).</p>
+</header>
+
+<main>
+  <div class="left">
+    <!-- PRODUCTS -->
+    <div class="panel">
+      <h2><span class="num">1</span> Producten</h2>
+      <div id="products"></div>
+      <button id="addProduct" class="btn-sm">+ Product toevoegen</button>
+    </div>
+
+    <!-- TEMPLATE -->
+    <div class="panel">
+      <h2><span class="num">2</span> Avery-template</h2>
+      <div class="row" style="margin-bottom:10px">
+        <div>
+          <label>Kies template</label>
+          <select id="templateSelect"></select>
+        </div>
+      </div>
+      <div class="tmpl-grid">
+        <div><label>Kolommen</label><input id="t_cols" type="number" min="1" step="1"></div>
+        <div><label>Rijen</label><input id="t_rows" type="number" min="1" step="1"></div>
+        <div><label>Etiket breedte (mm)</label><input id="t_lw" type="number" step="0.1"></div>
+        <div><label>Etiket hoogte (mm)</label><input id="t_lh" type="number" step="0.1"></div>
+        <div><label>Marge boven (mm)</label><input id="t_mt" type="number" step="0.1"></div>
+        <div><label>Marge links (mm)</label><input id="t_ml" type="number" step="0.1"></div>
+        <div><label>Tussenruimte horizontaal (mm)</label><input id="t_hg" type="number" step="0.1"></div>
+        <div><label>Tussenruimte verticaal (mm)</label><input id="t_vg" type="number" step="0.1"></div>
+        <div><label>Paginabreedte (mm)</label><input id="t_pw" type="number" step="0.1"></div>
+        <div><label>Paginahoogte (mm)</label><input id="t_ph" type="number" step="0.1"></div>
+        <div><label>Marge in etiket (mm)</label><input id="t_pad" type="number" step="0.1"></div>
+      </div>
+      <div class="toolbar">
+        <button id="saveTemplate" class="btn-sm">Template opslaan…</button>
+        <button id="exportTemplate" class="btn-sm">Exporteren (.json)</button>
+        <button id="importTemplate" class="btn-sm">Importeren (.json)</button>
+        <button id="deleteTemplate" class="btn-sm btn-danger">Opgeslagen verwijderen</button>
+        <input id="importFile" type="file" accept=".json,application/json" hidden>
+      </div>
+      <div id="fitInfo" class="muted" style="margin-top:8px"></div>
+    </div>
+
+    <!-- OPTIONS -->
+    <div class="panel">
+      <h2><span class="num">3</span> Barcode-opties</h2>
+      <div class="opts">
+        <div>
+          <label>Barcodetype</label>
+          <select id="o_symbology">
+            <option value="CODE128">Code128 (universeel — aanrader)</option>
+            <option value="EAN13">EAN-13 / GTIN (13 cijfers)</option>
+            <option value="CODE39">Code39</option>
+          </select>
+        </div>
+        <div>
+          <label>Lettergrootte naam (pt)</label>
+          <input id="o_namept" type="number" min="4" max="20" step="0.5" value="8">
+        </div>
+        <div class="check"><input type="checkbox" id="o_showname" checked><label for="o_showname">Productnaam tonen</label></div>
+        <div class="check"><input type="checkbox" id="o_shownumber" checked><label for="o_shownumber">Nummer onder barcode tonen</label></div>
+        <div class="check"><input type="checkbox" id="o_borders"><label for="o_borders">Etiketranden tonen (uitlijning testen)</label></div>
+      </div>
+    </div>
+
+    <!-- GENERATE -->
+    <div class="panel">
+      <h2><span class="num">4</span> Genereren</h2>
+      <button id="generate" class="btn-primary">Genereer Word (.docx)</button>
+      <div id="status" class="status info" style="display:none"></div>
+    </div>
+  </div>
+
+  <!-- PREVIEW -->
+  <div class="right">
+    <div class="preview-wrap panel">
+      <h2>Voorbeeld (eerste vel)</h2>
+      <div id="counts" class="kv"></div>
+      <div id="sheet" class="sheet"></div>
+      <p class="muted" style="margin-top:12px">Het voorbeeld toont schaalgetrouw hoe de etiketten op het vel komen. Doe altijd eerst een <strong>testprint</strong> en pas zo nodig de marges aan.</p>
+    </div>
+  </div>
+</main>
+
+<footer>
+  Gegevens blijven in je eigen browser (niets wordt verzonden). Templates en ingevoerde producten worden lokaal bewaard voor een volgende keer.
+</footer>
+
+<script src="vendor/JsBarcode.all.min.js"></script>
+<script src="vendor/docx.iife.js"></script>
+<script>
+"use strict";
+
+/* ---------- constants & presets ---------- */
+const MM_PER_PX96 = 25.4/96;
+const PX96_PER_MM = 96/25.4;            // mm -> CSS/px(96dpi)
+const A4 = {pw:210, ph:297};
+
+// Built-in Avery templates (mm). Values are close to spec; calibrate with a test print.
+const PRESETS = {
+  "Avery L6140 (45,7×25,4mm · 4×10 · 40/vel)":
+    {cols:4, rows:10, lw:45.7, lh:25.4, mt:21.5, ml:9.8, hg:2.5, vg:0, pw:210, ph:297, pad:1.5},
+  "Avery L7160 / J8160 (63,5×38,1mm · 3×7 · 21/vel)":
+    {cols:3, rows:7, lw:63.5, lh:38.1, mt:15.15, ml:7.25, hg:2.5, vg:0, pw:210, ph:297, pad:2},
+  "Avery L7651 (38,1×21,2mm · 5×13 · 65/vel)":
+    {cols:5, rows:13, lw:38.1, lh:21.2, mt:10.7, ml:4.75, hg:2.5, vg:0, pw:210, ph:297, pad:1.2},
+  "Avery L7163 (99,1×38,1mm · 2×7 · 14/vel)":
+    {cols:2, rows:7, lw:99.1, lh:38.1, mt:15.15, ml:4.65, hg:2.5, vg:0, pw:210, ph:297, pad:2},
+};
+
+const LS_TEMPLATES = "barcodemaker.templates.v1";
+const LS_STATE = "barcodemaker.state.v1";
+
+/* ---------- helpers ---------- */
+const $ = id => document.getElementById(id);
+function lsGet(k){ try{ return JSON.parse(localStorage.getItem(k)); }catch(e){ return null; } }
+function lsSet(k,v){ try{ localStorage.setItem(k, JSON.stringify(v)); }catch(e){} }
+function loadUserTemplates(){ return lsGet(LS_TEMPLATES) || {}; }
+
+const TEMPLATE_FIELDS = {t_cols:"cols",t_rows:"rows",t_lw:"lw",t_lh:"lh",t_mt:"mt",t_ml:"ml",t_hg:"hg",t_vg:"vg",t_pw:"pw",t_ph:"ph",t_pad:"pad"};
+
+function readTemplate(){
+  const t={};
+  for(const [id,key] of Object.entries(TEMPLATE_FIELDS)) t[key]=parseFloat($(id).value)||0;
+  return t;
+}
+function writeTemplate(t){
+  for(const [id,key] of Object.entries(TEMPLATE_FIELDS)) $(id).value = (t[key]!=null? t[key] : "");
+}
+
+function readOptions(){
+  return {
+    symbology: $("o_symbology").value,
+    namePt: parseFloat($("o_namept").value)||8,
+    showName: $("o_showname").checked,
+    showNumber: $("o_shownumber").checked,
+    borders: $("o_borders").checked,
+  };
+}
+
+/* ---------- products ---------- */
+let products = [];
+let uid = 1;
+function newProduct(){ return {id:uid++, name:"", gtin:"", rvg:"", zi:"", source:"gtin", qty:1}; }
+
+function renderProducts(){
+  const wrap = $("products"); wrap.innerHTML="";
+  products.forEach((p,idx)=>{
+    const div=document.createElement("div"); div.className="product";
+    div.innerHTML = `
+      <div class="grid">
+        <div><label>Productnaam</label><input data-f="name" value="${esc(p.name)}" placeholder="bijv. Paracetamol 500mg"></div>
+        <div><label>GTIN</label><input data-f="gtin" value="${esc(p.gtin)}" placeholder="cijfers"></div>
+        <div><label>RVG-nummer</label><input data-f="rvg" value="${esc(p.rvg)}" placeholder="bijv. RVG 12345"></div>
+        <div><label>ZI-nummer</label><input data-f="zi" value="${esc(p.zi)}" placeholder="cijfers"></div>
+      </div>
+      <div class="grid2">
+        <div><label>Barcode bevat</label>
+          <select data-f="source">
+            <option value="gtin">GTIN</option>
+            <option value="rvg">RVG-nummer</option>
+            <option value="zi">ZI-nummer</option>
+          </select>
+        </div>
+        <div><label>Aantal etiketten</label><input data-f="qty" type="number" min="1" step="1" value="${p.qty}"></div>
+        <div><button class="btn-sm btn-danger" data-del="${p.id}"${products.length<=1?" disabled":""}>Verwijderen</button></div>
+      </div>`;
+    div.querySelectorAll("[data-f]").forEach(el=>{
+      const f=el.getAttribute("data-f");
+      if(f==="source") el.value=p.source;
+      el.addEventListener("input",()=>{
+        p[f] = (f==="qty") ? Math.max(1, parseInt(el.value)||1) : el.value;
+        scheduleUpdate();
+      });
+    });
+    div.querySelector("[data-del]").addEventListener("click",()=>{
+      products = products.filter(x=>x.id!==p.id); renderProducts(); scheduleUpdate();
+    });
+    wrap.appendChild(div);
+  });
+}
+function esc(s){ return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;"); }
+
+/* ---------- barcode rendering ---------- */
+// Returns {canvas, error}. Renders high-res for print crispness.
+function renderBarcode(value, symbology, showNumber){
+  const canvas=document.createElement("canvas");
+  let error=null;
+  const v=String(value||"").trim();
+  if(!v){ return {canvas:null, error:"leeg nummer"}; }
+  try{
+    JsBarcode(canvas, v, {
+      format: symbology,
+      displayValue: showNumber,
+      width: 3, height: 90, fontSize: 22, margin: 6, textMargin: 2,
+      valid: (isValid)=>{ if(!isValid) error = "ongeldig voor "+symbology; }
+    });
+  }catch(e){ error = "ongeldig voor "+symbology; }
+  if(error) return {canvas:null, error};
+  return {canvas, error:null};
+}
+
+/* ---------- build label list ---------- */
+function chosenValue(p){
+  const v = (p.source==="gtin"?p.gtin : p.source==="rvg"?p.rvg : p.zi);
+  return String(v||"").trim();
+}
+function buildLabels(opts){
+  const labels=[]; const errors=[];
+  products.forEach((p,i)=>{
+    const name=(p.name||"").trim();
+    const val=chosenValue(p);
+    const qty=Math.max(1, parseInt(p.qty)||1);
+    if(!val){ errors.push(`Product ${i+1}${name?" ("+name+")":""}: geen ${p.source.toUpperCase()}-nummer ingevuld.`); return; }
+    const bc=renderBarcode(val, opts.symbology, opts.showNumber);
+    if(bc.error){ errors.push(`Product ${i+1}${name?" ("+name+")":""}: nummer "${val}" ${bc.error}.`); return; }
+    for(let q=0;q<qty;q++) labels.push({name, value:val, canvas:bc.canvas});
+  });
+  return {labels, errors};
+}
+
+/* ---------- fit geometry for one label (mm) ---------- */
+function labelGeometry(t, opts, canvas){
+  const pad = t.pad;
+  const boxW = Math.max(1, t.lw - 2*pad);
+  const nameH = opts.showName ? (opts.namePt*0.3528*1.15 + 0.6) : 0; // pt->mm approx line height
+  const boxH = Math.max(1, t.lh - 2*pad - nameH);
+  let dispW=boxW, dispH=boxH;
+  if(canvas){
+    const a = canvas.width/canvas.height;
+    if(boxW/boxH > a){ dispH=boxH; dispW=boxH*a; } else { dispW=boxW; dispH=boxW/a; }
+  }
+  return {pad, boxW, boxH, nameH, dispW, dispH};
+}
+
+/* ---------- preview ---------- */
+function renderPreview(t, opts, labels){
+  const sheet=$("sheet");
+  const targetW=380;                        // px on screen for page width
+  const scale=targetW/t.pw;
+  sheet.style.width=(t.pw*scale)+"px";
+  sheet.style.height=(t.ph*scale)+"px";
+  sheet.innerHTML="";
+  const perPage=t.cols*t.rows;
+  for(let idx=0; idx<perPage; idx++){
+    const c=idx%t.cols, r=Math.floor(idx/t.cols);
+    const x=t.ml + c*(t.lw+t.hg);
+    const y=t.mt + r*(t.lh+t.vg);
+    const el=document.createElement("div");
+    el.className="lbl"+(opts.borders?" bordered":"");
+    el.style.left=(x*scale)+"px"; el.style.top=(y*scale)+"px";
+    el.style.width=(t.lw*scale)+"px"; el.style.height=(t.lh*scale)+"px";
+    const lab=labels[idx];
+    if(lab){
+      const g=labelGeometry(t,opts,lab.canvas);
+      if(opts.showName && lab.name){
+        const nm=document.createElement("div"); nm.className="nm";
+        nm.style.fontSize=Math.max(5,opts.namePt*scale*1.2)+"px";
+        nm.textContent=lab.name; el.appendChild(nm);
+      }
+      const img=document.createElement("img");
+      img.src=lab.canvas.toDataURL("image/png");
+      img.style.width=(g.dispW*scale)+"px"; img.style.height=(g.dispH*scale)+"px";
+      el.appendChild(img);
+    }
+    sheet.appendChild(el);
+  }
+  const totalPages=Math.max(1, Math.ceil(labels.length/perPage));
+  $("counts").innerHTML =
+    `<span>${labels.length} etiket(ten) · ${perPage} per vel</span><span>${totalPages} vel${totalPages>1?"len":""}</span>`;
+}
+
+/* ---------- docx generation ---------- */
+function dataUrlToUint8(dataUrl){
+  const b64=dataUrl.split(",")[1]; const bin=atob(b64);
+  const arr=new Uint8Array(bin.length);
+  for(let i=0;i<bin.length;i++) arr[i]=bin.charCodeAt(i);
+  return arr;
+}
+function mmToPx96(mm){ return Math.round(mm*PX96_PER_MM); }
+
+function buildDocx(t, opts, labels){
+  const D=window.docx;
+  const mm=D.convertMillimetersToTwip;
+  const perPage=t.cols*t.rows;
+  const totalPages=Math.max(1, Math.ceil(labels.length/perPage));
+
+  const hasHGap=t.hg>0.001, hasVGap=t.vg>0.001;
+  const noBorder={style:D.BorderStyle.NONE, size:0, color:"FFFFFF"};
+  const cellBorderNone={top:noBorder,bottom:noBorder,left:noBorder,right:noBorder};
+  const cellBorderShow={
+    top:{style:D.BorderStyle.DASHED,size:2,color:"AAAAAA"},
+    bottom:{style:D.BorderStyle.DASHED,size:2,color:"AAAAAA"},
+    left:{style:D.BorderStyle.DASHED,size:2,color:"AAAAAA"},
+    right:{style:D.BorderStyle.DASHED,size:2,color:"AAAAAA"},
+  };
+  const labelBorder=opts.borders?cellBorderShow:cellBorderNone;
+
+  function emptyCell(widthMm){
+    return new D.TableCell({
+      width:{size:mm(widthMm), type:D.WidthType.DXA},
+      borders:cellBorderNone,
+      children:[new D.Paragraph({spacing:{before:0,after:0}, children:[]})],
+    });
+  }
+  function labelCell(lab){
+    const g=labelGeometry(t,opts,lab.canvas);
+    const kids=[];
+    if(opts.showName && lab.name){
+      kids.push(new D.Paragraph({
+        alignment:D.AlignmentType.CENTER,
+        spacing:{before:0,after:0,line:Math.round(opts.namePt*20),lineRule:"exact"},
+        children:[new D.TextRun({text:lab.name, bold:true, size:Math.round(opts.namePt*2)})],
+      }));
+    }
+    if(lab.canvas){
+      const png=dataUrlToUint8(lab.canvas.toDataURL("image/png"));
+      kids.push(new D.Paragraph({
+        alignment:D.AlignmentType.CENTER,
+        spacing:{before:0,after:0},
+        children:[new D.ImageRun({ data:png, transformation:{ width:mmToPx96(g.dispW), height:mmToPx96(g.dispH) } })],
+      }));
+    }
+    if(kids.length===0) kids.push(new D.Paragraph({spacing:{before:0,after:0},children:[]}));
+    return new D.TableCell({
+      width:{size:mm(t.lw), type:D.WidthType.DXA},
+      borders:labelBorder,
+      verticalAlign:D.VerticalAlign.CENTER,
+      margins:{top:mm(t.pad),bottom:mm(t.pad),left:mm(t.pad),right:mm(t.pad),
+               marginUnitType:D.WidthType.DXA},
+      children:kids,
+    });
+  }
+
+  const sections=[];
+  for(let page=0; page<totalPages; page++){
+    const rows=[];
+    for(let r=0; r<t.rows; r++){
+      // label row
+      const cells=[];
+      for(let c=0; c<t.cols; c++){
+        const idx=page*perPage + r*t.cols + c;
+        cells.push(labels[idx] ? labelCell(labels[idx]) : emptyCell(t.lw));
+        if(hasHGap && c<t.cols-1) cells.push(emptyCell(t.hg));
+      }
+      rows.push(new D.TableRow({
+        height:{value:mm(t.lh), rule:D.HeightRule.EXACT},
+        cantSplit:true, children:cells,
+      }));
+      // vertical gutter row
+      if(hasVGap && r<t.rows-1){
+        const gcells=[];
+        for(let c=0;c<t.cols;c++){ gcells.push(emptyCell(t.lw)); if(hasHGap && c<t.cols-1) gcells.push(emptyCell(t.hg)); }
+        rows.push(new D.TableRow({ height:{value:mm(t.vg), rule:D.HeightRule.EXACT}, cantSplit:true, children:gcells }));
+      }
+    }
+    const table=new D.Table({
+      layout:D.TableLayoutType.FIXED,
+      borders:{ // outer table borders off (cells control their own)
+        top:noBorder,bottom:noBorder,left:noBorder,right:noBorder,
+        insideHorizontal:noBorder,insideVertical:noBorder,
+      },
+      rows,
+    });
+    const usedH = t.rows*t.lh + (t.rows-1)*t.vg;
+    const tableW = t.cols*t.lw + (t.cols-1)*t.hg;
+    sections.push({
+      properties:{ page:{
+        size:{ width:mm(t.pw), height:mm(t.ph) },
+        margin:{
+          top:mm(t.mt), left:mm(t.ml),
+          right:mm(Math.max(0, t.pw - t.ml - tableW)),
+          bottom:mm(Math.max(0, t.ph - t.mt - usedH)),
+        },
+      }},
+      children:[table],
+    });
+  }
+  return new D.Document({ sections });
+}
+
+/* ---------- generate handler ---------- */
+async function generate(){
+  const t=readTemplate(), opts=readOptions();
+  const {labels, errors}=buildLabels(opts);
+  if(errors.length){ setStatus("err", "Kan niet genereren:", errors); return; }
+  if(!labels.length){ setStatus("err", "Geen etiketten om te genereren. Vul minstens één product met een nummer in.", []); return; }
+  setStatus("info", "Bezig met genereren…", []);
+  try{
+    const doc=buildDocx(t, opts, labels);
+    const blob=await window.docx.Packer.toBlob(doc);
+    const url=URL.createObjectURL(blob);
+    const a=document.createElement("a");
+    const stamp=new Date().toISOString().slice(0,10);
+    a.href=url; a.download=`etiketten_${stamp}.docx`; document.body.appendChild(a); a.click();
+    a.remove(); setTimeout(()=>URL.revokeObjectURL(url), 4000);
+    const perPage=t.cols*t.rows, pages=Math.ceil(labels.length/perPage);
+    setStatus("ok", `Gelukt! ${labels.length} etiket(ten) op ${pages} vel gegenereerd en gedownload.`, []);
+  }catch(e){
+    setStatus("err", "Er ging iets mis bij het maken van het Word-bestand: "+e.message, []);
+    console.error(e);
+  }
+}
+function setStatus(kind, msg, list){
+  const el=$("status"); el.style.display="block"; el.className="status "+kind;
+  el.innerHTML = esc(msg) + (list&&list.length ? "<ul class='err-list'>"+list.map(x=>"<li>"+esc(x)+"</li>").join("")+"</ul>" : "");
+}
+
+/* ---------- live update (preview + fit info + autosave) ---------- */
+let updTimer=null;
+function scheduleUpdate(){ clearTimeout(updTimer); updTimer=setTimeout(update,150); }
+function update(){
+  const t=readTemplate(), opts=readOptions();
+  const {labels}=buildLabels(opts);
+  renderPreview(t, opts, labels);
+  // fit info
+  const tableW=t.cols*t.lw+(t.cols-1)*t.hg, usedH=t.rows*t.lh+(t.rows-1)*t.vg;
+  const overW=(t.ml+tableW)>t.pw+0.5, overH=(t.mt+usedH)>t.ph+0.5;
+  let info=`Rasterbreedte ${tableW.toFixed(1)}mm (marge links ${t.ml}mm) · rasterhoogte ${usedH.toFixed(1)}mm (marge boven ${t.mt}mm) op ${t.pw}×${t.ph}mm.`;
+  if(overW) info+=" ⚠ Te breed voor de pagina.";
+  if(overH) info+=" ⚠ Te hoog voor de pagina.";
+  $("fitInfo").textContent=info;
+  saveState();
+}
+function saveState(){
+  lsSet(LS_STATE, {
+    products, template:readTemplate(), options:readOptions(),
+    selected:$("templateSelect").value
+  });
+}
+
+/* ---------- template select ---------- */
+function refreshTemplateSelect(selectValue){
+  const sel=$("templateSelect"); sel.innerHTML="";
+  const gPre=document.createElement("optgroup"); gPre.label="Standaard Avery-templates";
+  Object.keys(PRESETS).forEach(name=>{ const o=document.createElement("option"); o.value="preset:"+name; o.textContent=name; gPre.appendChild(o); });
+  sel.appendChild(gPre);
+  const user=loadUserTemplates(); const names=Object.keys(user);
+  if(names.length){
+    const gU=document.createElement("optgroup"); gU.label="Opgeslagen templates";
+    names.forEach(name=>{ const o=document.createElement("option"); o.value="user:"+name; o.textContent=name; gU.appendChild(o); });
+    sel.appendChild(gU);
+  }
+  const gCustom=document.createElement("optgroup"); gCustom.label="—";
+  const oc=document.createElement("option"); oc.value="custom"; oc.textContent="Aangepast (handmatig)"; gCustom.appendChild(oc);
+  sel.appendChild(gCustom);
+  if(selectValue) sel.value=selectValue;
+}
+function applySelectedTemplate(){
+  const v=$("templateSelect").value;
+  if(v.startsWith("preset:")) writeTemplate(PRESETS[v.slice(7)]);
+  else if(v.startsWith("user:")){ const u=loadUserTemplates(); if(u[v.slice(5)]) writeTemplate(u[v.slice(5)]); }
+  // custom: leave fields as-is
+  update();
+}
+
+/* ---------- wire up ---------- */
+function init(){
+  // restore state or defaults
+  const st=lsGet(LS_STATE);
+  if(st && st.products && st.products.length){
+    products=st.products.map(p=>({id:uid++, name:p.name||"", gtin:p.gtin||"", rvg:p.rvg||"", zi:p.zi||"", source:p.source||"gtin", qty:p.qty||1}));
+  } else {
+    products=[Object.assign(newProduct(), {name:"Paracetamol 500mg", gtin:"08712345678906", source:"gtin", qty:6})];
+  }
+  renderProducts();
+
+  refreshTemplateSelect();
+  if(st && st.options){
+    $("o_symbology").value=st.options.symbology||"CODE128";
+    $("o_namept").value=st.options.namePt||8;
+    $("o_showname").checked=st.options.showName!==false;
+    $("o_shownumber").checked=st.options.showNumber!==false;
+    $("o_borders").checked=!!st.options.borders;
+  }
+  if(st && st.template){ writeTemplate(st.template); refreshTemplateSelect(st.selected); if(st.selected) $("templateSelect").value=st.selected; }
+  else { writeTemplate(PRESETS[Object.keys(PRESETS)[0]]); $("templateSelect").value="preset:"+Object.keys(PRESETS)[0]; }
+
+  // events
+  $("addProduct").addEventListener("click",()=>{ products.push(newProduct()); renderProducts(); scheduleUpdate(); });
+  $("templateSelect").addEventListener("change", applySelectedTemplate);
+  Object.keys(TEMPLATE_FIELDS).forEach(id=>$(id).addEventListener("input",()=>{
+    // manual edit switches to "custom" unless it matches
+    scheduleUpdate();
+  }));
+  ["o_symbology","o_namept","o_showname","o_shownumber","o_borders"].forEach(id=>$(id).addEventListener("input",scheduleUpdate));
+  $("generate").addEventListener("click", generate);
+
+  $("saveTemplate").addEventListener("click",()=>{
+    const name=prompt("Naam voor deze template:");
+    if(!name) return;
+    const u=loadUserTemplates(); u[name]=readTemplate(); lsSet(LS_TEMPLATES,u);
+    refreshTemplateSelect("user:"+name); $("templateSelect").value="user:"+name; saveState();
+    setStatus("ok","Template \""+name+"\" opgeslagen. Beschikbaar in het menu (ook in een volgende sessie).",[]);
+  });
+  $("deleteTemplate").addEventListener("click",()=>{
+    const v=$("templateSelect").value;
+    if(!v.startsWith("user:")){ alert("Selecteer eerst een opgeslagen template."); return; }
+    const name=v.slice(5);
+    if(!confirm("Template \""+name+"\" verwijderen?")) return;
+    const u=loadUserTemplates(); delete u[name]; lsSet(LS_TEMPLATES,u);
+    refreshTemplateSelect(); applySelectedTemplate();
+  });
+  $("exportTemplate").addEventListener("click",()=>{
+    const t=readTemplate();
+    const blob=new Blob([JSON.stringify(t,null,2)],{type:"application/json"});
+    const url=URL.createObjectURL(blob); const a=document.createElement("a");
+    a.href=url; a.download="avery_template.json"; a.click(); setTimeout(()=>URL.revokeObjectURL(url),3000);
+  });
+  $("importTemplate").addEventListener("click",()=>$("importFile").click());
+  $("importFile").addEventListener("change",e=>{
+    const f=e.target.files[0]; if(!f) return;
+    const rd=new FileReader();
+    rd.onload=()=>{ try{ const t=JSON.parse(rd.result); writeTemplate(t); $("templateSelect").value="custom"; update();
+      setStatus("ok","Template geïmporteerd.",[]); }catch(err){ setStatus("err","Ongeldig template-bestand.",[]); } };
+    rd.readAsText(f); e.target.value="";
+  });
+
+  update();
+}
+document.addEventListener("DOMContentLoaded", init);
+</script>
+</body>
+</html>
