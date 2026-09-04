@@ -6,11 +6,14 @@ bevat. Het resultaat is een **Word-bestand (.docx)** dat je direct kunt printen.
 
 Alles draait lokaal in je eigen browser — er wordt niets verstuurd of geüpload.
 
+Het is **één enkel bestand** (`index.html`). Je hoeft niets te installeren, geen
+map bij elkaar te houden en geen internet te hebben. Je kunt het gerust op je
+bureaublad zetten, kopiëren of mailen.
+
 ## Gebruiken
 
-1. Open **`index.html`** in een browser (dubbelklik het bestand, of sleep het in
-   Chrome/Edge/Firefox). Er hoeft niets geïnstalleerd te worden en er is geen
-   internet nodig.
+1. **Dubbelklik `index.html`**. De pagina opent in je browser (Chrome of Edge werkt
+   het best).
 2. **Producten** (stap 1): vul per product de naam in en de nummers die je hebt
    (GTIN / RVG / ZI). Kies bij *"Barcode bevat"* welk nummer als barcode geprint
    moet worden en geef het aantal etiketten op. Met **+ Product toevoegen** maak je
@@ -65,13 +68,10 @@ printer zijn normaal.
 
 ## Technisch
 
-Eén map, geen build-stap:
-
-```
-index.html                     de volledige app (UI + logica)
-vendor/JsBarcode.all.min.js    barcodes genereren (JsBarcode 3.11.6)
-vendor/docx.iife.js            Word-bestand maken (docx 8.5.0)
-```
+Alles zit in dat ene `index.html`-bestand: de gebruikersinterface, de logica en de
+twee meegeleverde bibliotheken (**JsBarcode 3.11.6** voor de barcodes en **docx
+8.5.0** voor het Word-bestand) staan er rechtstreeks in verwerkt. Geen build-stap,
+geen externe afhankelijkheden, werkt offline.
 
 De barcodes worden als afbeelding op hoge resolutie gerenderd en samen met de
 productnaam in een Word-tabel geplaatst waarvan de kolombreedtes, rijhoogtes en
